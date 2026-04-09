@@ -1,6 +1,4 @@
-streamlit
-spacy
-networkx
-pyvis
-
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
+streamlit==1.33.0
+spacy==3.7.4
+networkx==3.2.1
+pyvis==0.3.2

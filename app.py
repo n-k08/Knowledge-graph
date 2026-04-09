@@ -3,13 +3,22 @@ import spacy
 import networkx as nx
 from pyvis.network import Network
 import random
+import subprocess
+import sys
 
 # -------------------------------
-# Load spaCy Model (NO runtime download)
+# Load spaCy Model (Stable Fix)
 # -------------------------------
 @st.cache_resource
 def load_model():
-    return spacy.load("en_core_web_sm")
+    try:
+        return spacy.load("en_core_web_sm")
+    except:
+        subprocess.run(
+            [sys.executable, "-m", "spacy", "download", "en_core_web_sm"],
+            check=True
+        )
+        return spacy.load("en_core_web_sm")
 
 nlp = load_model()
 
@@ -108,7 +117,7 @@ def visualize_graph(G):
 # -------------------------------
 st.set_page_config(page_title="Knowledge Graph Generator", layout="wide")
 
-st.title("Knowledge Graph Generator")
+st.title("🎨 Knowledge Graph Generator")
 st.markdown("Convert text into a **colorful interactive knowledge graph**.")
 
 user_text = st.text_area(
@@ -125,16 +134,16 @@ if st.button("Generate Knowledge Graph"):
             G, triples = text_to_connected_graph(user_text)
             html = visualize_graph(G)
 
-        st.success("Graph Generated!")
+        st.success("✅ Graph Generated!")
 
-        st.subheader("Extracted Triples")
+        st.subheader("🔗 Extracted Triples")
         st.write(triples if triples else "No relationships found.")
 
-        st.subheader("Interactive Graph")
+        st.subheader("📊 Interactive Graph")
         st.components.v1.html(html, height=750, scrolling=True)
 
         st.download_button(
-            label="Download Graph",
+            label="📥 Download Graph",
             data=html,
             file_name="knowledge_graph.html",
             mime="text/html"
