@@ -4,38 +4,44 @@ import networkx as nx
 from pyvis.network import Network
 import os
 import random
+import sys
+import subprocess
 
 # -------------------------------
-# Load or Download Model
+# Load or Download spaCy Model
 # -------------------------------
 @st.cache_resource
 def load_model():
     try:
         return spacy.load("en_core_web_sm")
-    except OSError:
+    except:
         st.write("Downloading spaCy model...")
-        os.system("python -m spacy download en_core_web_sm")
+        subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
         return spacy.load("en_core_web_sm")
 
 nlp = load_model()
 
 # -------------------------------
-# Extract Triples
+# Extract Triples (Improved)
 # -------------------------------
 def extract_triples(text):
     doc = nlp(text)
     triples = []
+
     for sent in doc.sents:
-        subject, relation, obj = "", "", ""
+        subject, relation, obj = None, None, None
+
         for token in sent:
-            if "subj" in token.dep_:
+            if token.dep_ in ("nsubj", "nsubjpass"):
                 subject = token.text
-            if "obj" in token.dep_:
+            elif token.dep_ in ("dobj", "pobj"):
                 obj = token.text
-            if token.pos_ == "VERB":
+            elif token.pos_ == "VERB":
                 relation = token.lemma_
+
         if subject and relation and obj:
             triples.append((subject, relation, obj))
+
     return triples
 
 # -------------------------------
@@ -51,124 +57,93 @@ def text_to_connected_graph(text):
     ]
 
     for s, r, o in triples:
-        G.add_node(s, color=random.choice(color_palette))
-        G.add_node(o, color=random.choice(color_palette))
-        G.add_edge(s, o, title=r, label=r)
+        if s not in G:
+            G.add_node(s, color=random.choice(color_palette))
+        if o not in G:
+            G.add_node(o, color=random.choice(color_palette))
 
-    # Connect all subgraphs to one main component
-    if not nx.is_connected(G.to_undirected()):
+        G.add_edge(s, o, label=r, title=r)
+
+    # Connect all components
+    if len(G.nodes) > 0 and not nx.is_connected(G.to_undirected()):
         components = list(nx.connected_components(G.to_undirected()))
-        main_component = components[0]
-        for i in range(1, len(components)):
-            node1 = list(main_component)[0]
-            node2 = list(components[i])[0]
-            G.add_edge(node1, node2, label="related_to", title="related_to")
-            main_component = main_component.union(components[i])
+        main = list(components[0])
+
+        for comp in components[1:]:
+            G.add_edge(main[0], list(comp)[0], label="related_to")
+            main.extend(comp)
 
     return G, triples
 
 # -------------------------------
-# Visualization with Better Zoom
+# Visualize Graph (Fixed PyVis)
 # -------------------------------
-def visualize_graph(G, output_file="knowledge_graph.html"):
+def visualize_graph(G):
     net = Network(
         height="750px",
         width="100%",
         directed=True,
         bgcolor="#ffffff",
         font_color="black",
-        notebook=False
     )
 
     net.from_nx(G)
 
-    # Compact layout physics
-    net.repulsion(
-        node_distance=90,
-        spring_length=90,
-        spring_strength=0.08,
-        damping=0.85
-    )
-
-    # ✅ Proper JSON for PyVis (fixes JSONDecodeError)
     net.set_options("""
     {
       "physics": {
         "stabilization": true,
         "barnesHut": {
           "gravitationalConstant": -2000,
-          "springLength": 90,
+          "springLength": 120,
           "springConstant": 0.04
         }
       },
       "interaction": {
-        "dragNodes": true,
-        "dragView": true,
         "hover": true,
         "zoomView": true,
-        "tooltipDelay": 150,
-        "zoomSpeed": 0.5,
+        "dragView": true,
         "navigationButtons": true,
         "keyboard": true
-      },
-      "nodes": {
-        "shape": "dot",
-        "scaling": {
-          "min": 8,
-          "max": 35
-        },
-        "font": {
-          "size": 14,
-          "strokeWidth": 2
-        }
-      },
-      "edges": {
-        "arrows": {
-          "to": { "enabled": true, "scaleFactor": 0.7 }
-        },
-        "smooth": {
-          "type": "dynamic"
-        }
       }
     }
     """)
 
-    net.save_graph(output_file)
-    return output_file
+    return net.generate_html()
 
 # -------------------------------
-# Streamlit Interface
+# Streamlit UI
 # -------------------------------
 st.set_page_config(page_title="Knowledge Graph Generator", layout="wide")
-st.title("🎨 Multi-Colored Knowledge Graph Generator")
-st.markdown(
-    "Paste your paragraph below. The app extracts subjects, relations, and objects, then builds a **colorful, zoomable knowledge graph**."
-)
+
+st.title("🎨 Knowledge Graph Generator")
+st.markdown("Convert text into a **colorful, interactive knowledge graph**.")
 
 user_text = st.text_area(
-    "Enter your paragraph:", height=200, placeholder="Type or paste your paragraph here..."
+    "Enter your paragraph:",
+    height=200,
+    placeholder="Example: Alice works at Google. Bob knows Alice."
 )
 
 if st.button("Generate Knowledge Graph"):
     if not user_text.strip():
-        st.warning("Please enter some text first.")
+        st.warning("Please enter some text.")
     else:
-        with st.spinner("Building your graph..."):
+        with st.spinner("Generating graph..."):
             G, triples = text_to_connected_graph(user_text)
-            graph_path = visualize_graph(G)
+            html = visualize_graph(G)
 
-        st.success("✅ Knowledge graph created successfully!")
-        st.subheader("Extracted Relations:")
-        st.write(triples)
+        st.success("✅ Graph Generated!")
 
-        # Show interactive HTML graph
-        st.components.v1.html(open(graph_path, "r", encoding="utf-8").read(), height=750, scrolling=True)
+        st.subheader("🔗 Extracted Triples")
+        st.write(triples if triples else "No relationships found.")
 
-        # Download button
-        with open(graph_path, "rb") as f:
-            st.download_button(
-                label="📥 Download Knowledge Graph (HTML)",
-                data=f,
-                file_name="knowledge_graph.html",
-                mime="text/html"
-            )
+        st.subheader("📊 Interactive Graph")
+        st.components.v1.html(html, height=750, scrolling=True)
+
+        st.download_button(
+            label="📥 Download Graph HTML",
+            data=html,
+            file_name="knowledge_graph.html",
+            mime="text/html"
+        )
