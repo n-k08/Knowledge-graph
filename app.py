@@ -2,27 +2,19 @@ import streamlit as st
 import spacy
 import networkx as nx
 from pyvis.network import Network
-import os
 import random
-import sys
-import subprocess
 
 # -------------------------------
-# Load or Download spaCy Model
+# Load spaCy Model (NO runtime download)
 # -------------------------------
 @st.cache_resource
 def load_model():
-    try:
-        return spacy.load("en_core_web_sm")
-    except:
-        st.write("Downloading spaCy model...")
-        subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
-        return spacy.load("en_core_web_sm")
+    return spacy.load("en_core_web_sm")
 
 nlp = load_model()
 
 # -------------------------------
-# Extract Triples (Improved)
+# Extract Triples
 # -------------------------------
 def extract_triples(text):
     doc = nlp(text)
@@ -45,38 +37,38 @@ def extract_triples(text):
     return triples
 
 # -------------------------------
-# Build Connected Graph
+# Build Graph
 # -------------------------------
 def text_to_connected_graph(text):
     triples = extract_triples(text)
     G = nx.DiGraph()
 
-    color_palette = [
-        "#FF5733", "#33FF57", "#3357FF", "#FF33A6", "#33FFF5",
-        "#F3FF33", "#B833FF", "#FF9A33", "#33FF9E", "#FF3333"
+    colors = [
+        "#FF5733", "#33FF57", "#3357FF", "#FF33A6",
+        "#33FFF5", "#F3FF33", "#B833FF", "#FF9A33"
     ]
 
     for s, r, o in triples:
         if s not in G:
-            G.add_node(s, color=random.choice(color_palette))
+            G.add_node(s, color=random.choice(colors))
         if o not in G:
-            G.add_node(o, color=random.choice(color_palette))
+            G.add_node(o, color=random.choice(colors))
 
         G.add_edge(s, o, label=r, title=r)
 
-    # Connect all components
+    # Connect components
     if len(G.nodes) > 0 and not nx.is_connected(G.to_undirected()):
-        components = list(nx.connected_components(G.to_undirected()))
-        main = list(components[0])
+        comps = list(nx.connected_components(G.to_undirected()))
+        main = list(comps[0])
 
-        for comp in components[1:]:
+        for comp in comps[1:]:
             G.add_edge(main[0], list(comp)[0], label="related_to")
             main.extend(comp)
 
     return G, triples
 
 # -------------------------------
-# Visualize Graph (Fixed PyVis)
+# Visualize Graph
 # -------------------------------
 def visualize_graph(G):
     net = Network(
@@ -112,12 +104,12 @@ def visualize_graph(G):
     return net.generate_html()
 
 # -------------------------------
-# Streamlit UI
+# UI
 # -------------------------------
 st.set_page_config(page_title="Knowledge Graph Generator", layout="wide")
 
-st.title("🎨 Knowledge Graph Generator")
-st.markdown("Convert text into a **colorful, interactive knowledge graph**.")
+st.title("Knowledge Graph Generator")
+st.markdown("Convert text into a **colorful interactive knowledge graph**.")
 
 user_text = st.text_area(
     "Enter your paragraph:",
@@ -133,16 +125,16 @@ if st.button("Generate Knowledge Graph"):
             G, triples = text_to_connected_graph(user_text)
             html = visualize_graph(G)
 
-        st.success("✅ Graph Generated!")
+        st.success("Graph Generated!")
 
-        st.subheader("🔗 Extracted Triples")
+        st.subheader("Extracted Triples")
         st.write(triples if triples else "No relationships found.")
 
-        st.subheader("📊 Interactive Graph")
+        st.subheader("Interactive Graph")
         st.components.v1.html(html, height=750, scrolling=True)
 
         st.download_button(
-            label="📥 Download Graph HTML",
+            label="Download Graph",
             data=html,
             file_name="knowledge_graph.html",
             mime="text/html"
