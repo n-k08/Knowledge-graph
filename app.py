@@ -7,16 +7,18 @@ import subprocess
 import sys
 
 # -------------------------------
-# Load spaCy Model (Stable Fix)
+# Load spaCy Model (Cloud Safe)
 # -------------------------------
 @st.cache_resource
 def load_model():
     try:
         return spacy.load("en_core_web_sm")
     except:
+        # Safe download (no crash)
         subprocess.run(
             [sys.executable, "-m", "spacy", "download", "en_core_web_sm"],
-            check=True
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
         )
         return spacy.load("en_core_web_sm")
 
@@ -65,7 +67,7 @@ def text_to_connected_graph(text):
 
         G.add_edge(s, o, label=r, title=r)
 
-    # Connect components
+    # Connect disconnected components
     if len(G.nodes) > 0 and not nx.is_connected(G.to_undirected()):
         comps = list(nx.connected_components(G.to_undirected()))
         main = list(comps[0])
@@ -77,7 +79,7 @@ def text_to_connected_graph(text):
     return G, triples
 
 # -------------------------------
-# Visualize Graph
+# Visualize Graph (PyVis Fix)
 # -------------------------------
 def visualize_graph(G):
     net = Network(
@@ -113,35 +115,43 @@ def visualize_graph(G):
     return net.generate_html()
 
 # -------------------------------
-# UI
+# Streamlit UI
 # -------------------------------
 st.set_page_config(page_title="Knowledge Graph Generator", layout="wide")
 
 st.title("🎨 Knowledge Graph Generator")
-st.markdown("Convert text into a **colorful interactive knowledge graph**.")
+st.markdown("Convert text into a **colorful, interactive knowledge graph**.")
 
+# Input box
 user_text = st.text_area(
     "Enter your paragraph:",
     height=200,
     placeholder="Example: Alice works at Google. Bob knows Alice."
 )
 
+# Button
 if st.button("Generate Knowledge Graph"):
     if not user_text.strip():
-        st.warning("Please enter some text.")
+        st.warning("⚠️ Please enter some text.")
     else:
-        with st.spinner("Generating graph..."):
+        with st.spinner("🔄 Generating graph..."):
             G, triples = text_to_connected_graph(user_text)
             html = visualize_graph(G)
 
-        st.success("✅ Graph Generated!")
+        st.success("✅ Graph Generated Successfully!")
 
+        # Show triples
         st.subheader("🔗 Extracted Triples")
-        st.write(triples if triples else "No relationships found.")
+        if triples:
+            st.write(triples)
+        else:
+            st.info("No relationships found. Try more descriptive text.")
 
+        # Show graph
         st.subheader("📊 Interactive Graph")
         st.components.v1.html(html, height=750, scrolling=True)
 
+        # Download option
         st.download_button(
             label="📥 Download Graph",
             data=html,

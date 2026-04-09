@@ -1,4 +1,5 @@
-streamlit==1.33.0
-spacy==3.7.4
-networkx==3.2.1
-pyvis==0.3.2
+streamlit
+spacy<3.8
+networkx
+pyvis
+numpy<2.0
