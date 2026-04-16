@@ -1,0 +1,8 @@
+streamlit
+spacy
+networkx
+pyvis
+neo4j
+sentence-transformers
+faiss-cpu
+numpy<2.0
