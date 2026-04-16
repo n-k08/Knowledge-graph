@@ -1,160 +1,130 @@
 import streamlit as st
-import spacy
-import networkx as nx
+from graph_builder import build_hybrid_graph
 from pyvis.network import Network
 import random
-import subprocess
-import sys
 
 # -------------------------------
-# Load spaCy Model (Cloud Safe)
+# Page Config
 # -------------------------------
-@st.cache_resource
-def load_model():
-    try:
-        return spacy.load("en_core_web_sm")
-    except:
-        # Safe download (no crash)
-        subprocess.run(
-            [sys.executable, "-m", "spacy", "download", "en_core_web_sm"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        return spacy.load("en_core_web_sm")
-
-nlp = load_model()
+st.set_page_config(page_title="Hybrid Knowledge Graph", layout="wide")
 
 # -------------------------------
-# Extract Triples
+# Dark UI Styling
 # -------------------------------
-def extract_triples(text):
-    doc = nlp(text)
-    triples = []
+st.markdown("""
+<style>
+body {
+    background-color: #0e1117;
+    color: white;
+}
+textarea {
+    background-color: #1c1f26 !important;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-    for sent in doc.sents:
-        subject, relation, obj = None, None, None
-
-        for token in sent:
-            if token.dep_ in ("nsubj", "nsubjpass"):
-                subject = token.text
-            elif token.dep_ in ("dobj", "pobj"):
-                obj = token.text
-            elif token.pos_ == "VERB":
-                relation = token.lemma_
-
-        if subject and relation and obj:
-            triples.append((subject, relation, obj))
-
-    return triples
+st.title("🧠 Hybrid Knowledge Graph")
+st.markdown("Dark mode • Clean • Colorful Nodes")
 
 # -------------------------------
-# Build Graph
+# Input
 # -------------------------------
-def text_to_connected_graph(text):
-    triples = extract_triples(text)
-    G = nx.DiGraph()
-
-    colors = [
-        "#FF5733", "#33FF57", "#3357FF", "#FF33A6",
-        "#33FFF5", "#F3FF33", "#B833FF", "#FF9A33"
-    ]
-
-    for s, r, o in triples:
-        if s not in G:
-            G.add_node(s, color=random.choice(colors))
-        if o not in G:
-            G.add_node(o, color=random.choice(colors))
-
-        G.add_edge(s, o, label=r, title=r)
-
-    # Connect disconnected components
-    if len(G.nodes) > 0 and not nx.is_connected(G.to_undirected()):
-        comps = list(nx.connected_components(G.to_undirected()))
-        main = list(comps[0])
-
-        for comp in comps[1:]:
-            G.add_edge(main[0], list(comp)[0], label="related_to")
-            main.extend(comp)
-
-    return G, triples
-
-# -------------------------------
-# Visualize Graph (PyVis Fix)
-# -------------------------------
-def visualize_graph(G):
-    net = Network(
-        height="750px",
-        width="100%",
-        directed=True,
-        bgcolor="#ffffff",
-        font_color="black",
-    )
-
-    net.from_nx(G)
-
-    net.set_options("""
-    {
-      "physics": {
-        "stabilization": true,
-        "barnesHut": {
-          "gravitationalConstant": -2000,
-          "springLength": 120,
-          "springConstant": 0.04
-        }
-      },
-      "interaction": {
-        "hover": true,
-        "zoomView": true,
-        "dragView": true,
-        "navigationButtons": true,
-        "keyboard": true
-      }
-    }
-    """)
-
-    return net.generate_html()
-
-# -------------------------------
-# Streamlit UI
-# -------------------------------
-st.set_page_config(page_title="Knowledge Graph Generator", layout="wide")
-
-st.title("🎨 Knowledge Graph Generator")
-st.markdown("Convert text into a **colorful, interactive knowledge graph**.")
-
-# Input box
-user_text = st.text_area(
-    "Enter your paragraph:",
+text = st.text_area(
+    "Enter text",
     height=200,
-    placeholder="Example: Alice works at Google. Bob knows Alice."
+    placeholder="Example: Elon Musk founded SpaceX. Tesla builds electric cars."
 )
 
-# Button
-if st.button("Generate Knowledge Graph"):
-    if not user_text.strip():
-        st.warning("⚠️ Please enter some text.")
+# -------------------------------
+# Generate Graph
+# -------------------------------
+if st.button("Generate Graph"):
+    if not text.strip():
+        st.warning("⚠️ Enter some text")
     else:
-        with st.spinner("🔄 Generating graph..."):
-            G, triples = text_to_connected_graph(user_text)
-            html = visualize_graph(G)
+        G, triples = build_hybrid_graph(text)
 
-        st.success("✅ Graph Generated Successfully!")
+        st.subheader("🔗 Extracted Relationships")
+        st.write(triples if triples else "No strong relations found.")
 
-        # Show triples
-        st.subheader("🔗 Extracted Triples")
-        if triples:
-            st.write(triples)
-        else:
-            st.info("No relationships found. Try more descriptive text.")
+        # -------------------------------
+        # Graph Setup
+        # -------------------------------
+        net = Network(
+            height="750px",
+            width="100%",
+            directed=True,
+            bgcolor="#0e1117",
+            font_color="white"
+        )
 
-        # Show graph
-        st.subheader("📊 Interactive Graph")
-        st.components.v1.html(html, height=750, scrolling=True)
+        # 🎨 NODE COLORS (random)
+        node_colors = ["#9D4EDD", "#2ECC71", "#FF4DA6"]  # Violet, Green, Pink
 
-        # Download option
+        # 🔗 EDGE COLOR
+        edge_color = "#FFA500"  # Orange
+
+        # -------------------------------
+        # Add Nodes (Random Colors)
+        # -------------------------------
+        for node in G.nodes():
+            net.add_node(
+                node,
+                label=node,
+                color=random.choice(node_colors),
+                size=22,
+                font={"size": 16, "color": "white"}
+            )
+
+        # -------------------------------
+        # Add Edges (Orange only)
+        # -------------------------------
+        for s, t, data in G.edges(data=True):
+            net.add_edge(
+                s, t,
+                label=data.get("label", ""),
+                color=edge_color,
+                width=2
+            )
+
+        # -------------------------------
+        # Smooth Layout
+        # -------------------------------
+        net.set_options("""
+        {
+          "physics": {
+            "barnesHut": {
+              "gravitationalConstant": -2300,
+              "centralGravity": 0.3,
+              "springLength": 140,
+              "springConstant": 0.05,
+              "damping": 0.9
+            }
+          },
+          "interaction": {
+            "hover": true,
+            "zoomView": true,
+            "dragView": true,
+            "navigationButtons": true
+          },
+          "edges": {
+            "smooth": {
+              "type": "dynamic"
+            }
+          }
+        }
+        """)
+
+        html = net.generate_html()
+        st.components.v1.html(html, height=750)
+
+        # -------------------------------
+        # Download
+        # -------------------------------
         st.download_button(
             label="📥 Download Graph",
             data=html,
-            file_name="knowledge_graph.html",
+            file_name="colorful_graph.html",
             mime="text/html"
         )
