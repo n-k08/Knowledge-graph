@@ -1,5 +1,0 @@
-streamlit
-spacy<3.8
-networkx
-pyvis
-numpy<2.0
